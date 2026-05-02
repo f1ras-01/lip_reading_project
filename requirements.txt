@@ -1,0 +1,25 @@
+# =============================================================================
+#  requirements.txt  –  pinned for Python 3.9.13 + TF 2.10.1 on Windows
+#
+#  Install after activating the conda environment:
+#      pip install -r requirements.txt --no-cache-dir
+#
+#  DO NOT upgrade tensorflow on Windows beyond 2.10.x.
+#  TF 2.11+ dropped native Windows GPU support; it requires WSL2.
+# =============================================================================
+
+# ── Deep learning ─────────────────────────────────────────────────────────────
+tensorflow==2.10.1
+
+# ── Computer vision + landmark extraction ─────────────────────────────────────
+mediapipe==0.9.3.0
+opencv-python==4.8.1.78
+
+# ── Numerical / data ──────────────────────────────────────────────────────────
+# numpy 1.23.x is the last series fully compatible with TF 2.10
+numpy==1.23.5
+scikit-learn==1.2.2
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+tqdm==4.65.0
+matplotlib==3.7.1
