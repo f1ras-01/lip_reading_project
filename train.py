@@ -27,7 +27,7 @@ import matplotlib; matplotlib.use("Agg")          # headless plotting
 import matplotlib.pyplot as plt
 
 from config import (
-    LANDMARKS_PKL, MODEL_PATH, LOG_DIR,
+    LANDMARKS_PKL, MODEL_PATH, LOG_DIR, HISTORY_PNG,
     NUM_FRAMES, NUM_FEATURES, NUM_CLASSES,
     BATCH_SIZE, EPOCHS, LEARNING_RATE,
     VAL_SPLIT, TEST_SPLIT, RANDOM_SEED, CLASSES,
@@ -187,7 +187,7 @@ def build_model(num_classes: int = NUM_CLASSES) -> tf.keras.Model:
 #  Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def plot_history(history, save_path="training_history.png"):
+def plot_history(history, save_path=HISTORY_PNG):
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
     axes[0].plot(history.history["loss"],     label="Train loss")
@@ -270,7 +270,6 @@ if __name__ == "__main__":
     )
 
     # ── Callbacks ────────────────────────────────────────────────────────────
-    os.makedirs(LOG_DIR, exist_ok=True)
     cbs = [
         callbacks.ModelCheckpoint(
             MODEL_PATH,

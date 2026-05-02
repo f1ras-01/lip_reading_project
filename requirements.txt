@@ -12,7 +12,9 @@
 tensorflow==2.10.1
 
 # ── Computer vision + landmark extraction ─────────────────────────────────────
-mediapipe==0.9.3.0
+# mediapipe 0.10 removed mp.solutions; the code uses mediapipe_compat.py
+# which targets the new Tasks API. Any 0.10.x build works.
+mediapipe>=0.10.0
 opencv-python==4.8.1.78
 
 # ── Numerical / data ──────────────────────────────────────────────────────────

@@ -17,55 +17,31 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import cv2
 import numpy as np
-import mediapipe as mp
 import tensorflow as tf
 from tensorflow.keras import models
 
 from config import (
-    MODEL_PATH, LIP_INDICES, NUM_FRAMES, NUM_FEATURES,
-    CLASSES, NUM_CLASSES, CONFIDENCE_THRESHOLD,
+    MODEL_PATH, NUM_FRAMES, NUM_FEATURES,
+    CLASSES, CONFIDENCE_THRESHOLD,
 )
+from mediapipe_compat import setup_video, setup_video_landmark_overlay
+
+# ── MediaPipe: initialise video-mode extractors once ─────────────────────────
+#  setup_video()  returns extract(bgr_frame, timestamp_ms) → (40,) | None
+#  setup_video_landmark_overlay() returns overlay(bgr_frame, timestamp_ms)
+#    → (annotated_frame, face_found: bool)
+#
+#  Both use the same underlying FaceLandmarker instance (VIDEO running mode)
+#  which gives inter-frame tracking for smoother webcam performance.
+#  We create two separate instances so video-file and webcam modes can each
+#  manage their own timestamp streams independently.
+_extract_landmarks  = setup_video()
+_landmark_overlay   = setup_video_landmark_overlay()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  MediaPipe  –  video (tracking) mode for smoother real-time detection
+#  Sequence helper
 # ─────────────────────────────────────────────────────────────────────────────
-_face_mesh = mp.solutions.face_mesh.FaceMesh(
-    static_image_mode=False,
-    max_num_faces=1,
-    refine_landmarks=True,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5,
-)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Shared utilities (same maths as extract_landmarks.py)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _normalise(raw: np.ndarray) -> np.ndarray:
-    n = len(LIP_INDICES)
-    xs = raw[:n].copy()
-    ys = raw[n:].copy()
-    cx, cy = xs.mean(), ys.mean()
-    xs -= cx;  ys -= cy
-    scale = float(np.sqrt((xs**2 + ys**2).mean())) + 1e-8
-    xs /= scale;  ys /= scale
-    return np.concatenate([xs, ys]).astype(np.float32)
-
-
-def _extract_landmarks(frame: np.ndarray):
-    """Return normalised (40,) landmark array from a BGR frame, or None."""
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    result = _face_mesh.process(rgb)
-    if not result.multi_face_landmarks:
-        return None
-    lm = result.multi_face_landmarks[0].landmark
-    raw = np.array(
-        [lm[i].x for i in LIP_INDICES] + [lm[i].y for i in LIP_INDICES],
-        dtype=np.float32,
-    )
-    return _normalise(raw)
-
 
 def _resample(seq: np.ndarray, target: int = NUM_FRAMES) -> np.ndarray:
     n = len(seq)
@@ -76,21 +52,6 @@ def _resample(seq: np.ndarray, target: int = NUM_FRAMES) -> np.ndarray:
         idx = np.linspace(0, n - 1, target, dtype=int)
         return seq[idx]
     return seq
-
-
-def _draw_lip_mesh(frame: np.ndarray) -> np.ndarray:
-    """Overlay MediaPipe lip landmarks on the frame (purely visual)."""
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    result = _face_mesh.process(rgb)
-    if not result.multi_face_landmarks:
-        return frame
-    h, w = frame.shape[:2]
-    lm = result.multi_face_landmarks[0].landmark
-    for idx in LIP_INDICES:
-        x = int(lm[idx].x * w)
-        y = int(lm[idx].y * h)
-        cv2.circle(frame, (x, y), 2, (0, 255, 180), -1)
-    return frame
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,14 +96,18 @@ def predict_video(video_path: str):
     model = models.load_model(MODEL_PATH)
 
     cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     frames = []
+    frame_idx = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        feat = _extract_landmarks(frame)
+        timestamp_ms = int(frame_idx * 1000 / fps)
+        feat = _extract_landmarks(frame, timestamp_ms)
         if feat is not None:
             frames.append(feat)
+        frame_idx += 1
     cap.release()
 
     label, conf, top5 = _predict(model, frames)
@@ -267,6 +232,7 @@ def webcam_demo():
 
     fps_time = time.time()
     frame_count = 0
+    start_time_ms = int(time.time() * 1000)
 
     while True:
         ret, frame = cap.read()
@@ -274,15 +240,18 @@ def webcam_demo():
             break
         frame = cv2.flip(frame, 1)   # mirror for natural feel
 
-        # ── Landmark extraction ──────────────────────────────────────────────
-        feat = _extract_landmarks(frame.copy())
+        # Monotonically increasing timestamp required by VIDEO running mode
+        timestamp_ms = int(time.time() * 1000) - start_time_ms
+
+        # ── Landmark extraction + overlay ────────────────────────────────────
+        feat = _extract_landmarks(frame.copy(), timestamp_ms)
         state["no_face"] = (feat is None)
 
         if state["recording"] and feat is not None:
             state["frames"].append(feat)
 
-        # Draw lip mesh on frame
-        frame = _draw_lip_mesh(frame)
+        # Draw lip dots on frame using the overlay landmarker
+        frame, _ = _landmark_overlay(frame, timestamp_ms)
 
         # ── Auto-capture countdown ───────────────────────────────────────────
         if state["auto_end"] is not None:

@@ -1,117 +1,197 @@
 @echo off
 :: =============================================================================
-::  setup_env.bat  –  One-shot environment setup for the lip-reader project
+::  setup_env.bat  --  Environment setup for the lip-reader project
 ::
-::  Requirements
-::  ────────────
-::  • Anaconda or Miniconda installed  (https://docs.conda.io/en/latest/miniconda.html)
-::  • NVIDIA driver ≥ 452.39           (check: nvidia-smi)
-::  • Internet access
+::  Works with your existing setup:
+::    - Python 3.9.13 already installed system-wide (used directly via venv)
+::    - CUDA + cuDNN already installed system-wide (used as-is, nothing reinstalled)
+::    - No Miniconda required
 ::
-::  Run once from the project root:
+::  Run once from the project root folder:
 ::      setup_env.bat
 :: =============================================================================
 setlocal EnableDelayedExpansion
 
-set ENV_NAME=lip_reader
-set PYTHON_VER=3.9.13
+set VENV_DIR=venv
 
 echo.
 echo ============================================================
-echo   Lip Reader — Environment Setup
+echo   Lip Reader -- Environment Setup
 echo ============================================================
 echo.
 
-:: ── 0. Verify conda is available ─────────────────────────────────────────────
-where conda >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] conda not found.
-    echo         Install Miniconda from: https://docs.conda.io/en/latest/miniconda.html
-    echo         Then re-run this script.
-    pause
-    exit /b 1
-)
-echo [OK] conda found.
-
-:: ── 1. Verify NVIDIA driver is present ───────────────────────────────────────
+:: ── 0. Verify NVIDIA driver ───────────────────────────────────────────────────
+echo [CHECK] NVIDIA driver ...
 where nvidia-smi >nul 2>&1
 if errorlevel 1 (
-    echo [WARN] nvidia-smi not found — your NVIDIA driver may not be installed.
-    echo        Download from: https://www.nvidia.com/drivers
-    echo        Continuing anyway; training will fall back to CPU.
-    echo.
+    echo   [WARN] nvidia-smi not found. Make sure NVIDIA drivers are installed.
 ) else (
-    echo [OK] NVIDIA driver detected:
+    echo   [OK] NVIDIA driver:
     nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
-    echo.
+)
+echo.
+
+:: ── 1. Verify system CUDA ─────────────────────────────────────────────────────
+echo [CHECK] CUDA toolkit ...
+where nvcc >nul 2>&1
+if errorlevel 1 (
+    echo   [WARN] nvcc not found in PATH.
+    echo          TF 2.10 needs CUDA 11.2. Check that your CUDA bin folder is in PATH:
+    echo          e.g. C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.2\bin
+    echo          If it is there and nvcc still fails, restart this terminal.
+) else (
+    echo   [OK] CUDA detected:
+    nvcc --version | findstr /C:"release"
+    nvcc --version | findstr /C:"release" | findstr /C:"11.2" >nul 2>&1
+    if errorlevel 1 (
+        echo   [WARN] TF 2.10 requires CUDA 11.2 specifically.
+        echo          A different version was found -- GPU may not work with TF 2.10.
+        echo          See INSTALL.md ^> "CUDA version mismatch" for how to handle this.
+    ) else (
+        echo   [OK] CUDA 11.2 confirmed -- correct version for TF 2.10.
+    )
+)
+echo.
+
+:: ── 2. Find Python 3.9 ────────────────────────────────────────────────────────
+echo [1/4] Locating Python 3.9 ...
+
+:: Try the Python Launcher first (py -3.9). It reads all installed versions
+:: from the Windows registry and picks the right one regardless of what is
+:: currently first on your PATH (avoids accidentally using 3.13 or 2.7).
+py -3.9 --version >nul 2>&1
+if not errorlevel 1 (
+    set PYTHON_CMD=py -3.9
+    echo   [OK] Found via Python Launcher: & py -3.9 --version
+    goto :create_venv
 )
 
-:: ── 2. Create conda environment ───────────────────────────────────────────────
-echo [1/5] Creating conda environment "%ENV_NAME%" with Python %PYTHON_VER% ...
-conda create -n %ENV_NAME% python=%PYTHON_VER% -y
+:: Fallback: look for python3.9.exe directly in common install locations
+for %%P in (
+    "C:\Python39\python.exe"
+    "C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python39\python.exe"
+    "C:\Program Files\Python39\python.exe"
+) do (
+    if exist %%P (
+        set PYTHON_CMD=%%P
+        echo   [OK] Found at %%P
+        goto :create_venv
+    )
+)
+
+echo   [FAIL] Python 3.9 not found via 'py -3.9' or common paths.
+echo          Make sure Python 3.9.13 is installed and the Python Launcher is enabled.
+echo          See INSTALL.md for details.
+pause
+exit /b 1
+
+:create_venv
+:: ── 3. Create virtual environment ─────────────────────────────────────────────
+echo.
+echo [2/4] Creating virtual environment in .\%VENV_DIR%\ ...
+
+if exist %VENV_DIR%\ (
+    echo   [INFO] %VENV_DIR%\ already exists -- skipping creation.
+    echo          Delete it and re-run if you want a clean rebuild.
+    goto :install_packages
+)
+
+%PYTHON_CMD% -m venv %VENV_DIR%
 if errorlevel 1 (
-    echo [ERROR] Failed to create conda environment.
+    echo   [FAIL] venv creation failed.
     pause
     exit /b 1
 )
-echo [OK] Environment created.
-echo.
+echo   [OK] Virtual environment created.
 
-:: ── 3. Install CUDA toolkit + cuDNN via conda-forge ──────────────────────────
-::
-::  TensorFlow 2.10.1 requires:
-::    CUDA  11.2.x
-::    cuDNN  8.1.x
-::
-::  We install them inside the conda env so they are completely isolated from
-::  any system-level CUDA installation and do not conflict with other projects.
-::
-echo [2/5] Installing CUDA 11.2 + cuDNN 8.1 (this may take a few minutes) ...
-call conda run -n %ENV_NAME% conda install -c conda-forge ^
-    cudatoolkit=11.2 ^
-    cudnn=8.1.0 ^
-    -y
+:install_packages
+:: ── 4. Install packages ────────────────────────────────────────────────────────
+echo.
+echo [3/4] Installing packages from requirements.txt ...
+echo       (This may take 5-10 minutes on the first run)
+
+call %VENV_DIR%\Scripts\activate.bat
+
+:: Upgrade pip first to avoid resolver warnings
+python -m pip install --upgrade pip --quiet
+
+pip install -r requirements.txt --no-cache-dir
 if errorlevel 1 (
-    echo [ERROR] CUDA/cuDNN installation failed.
+    echo   [FAIL] pip install failed. See errors above.
     pause
     exit /b 1
 )
-echo [OK] CUDA toolkit installed inside conda env.
-echo.
+echo   [OK] All packages installed.
 
-:: ── 4. Install Python packages ────────────────────────────────────────────────
-echo [3/5] Installing Python packages from requirements.txt ...
-call conda run -n %ENV_NAME% pip install -r requirements.txt --no-cache-dir
+:: ── 5. Verify GPU ─────────────────────────────────────────────────────────────
+echo.
+echo [4/4] Running GPU verification ...
+echo.
+python verify_gpu.py
+
+:: ── 5. Initialise git repository ─────────────────────────────────────────────
+echo.
+echo [5/5] Setting up git ...
+
+where git >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] pip install failed.
-    pause
-    exit /b 1
+    echo   [WARN] git not found in PATH. Install from https://git-scm.com
+    echo          Skipping git init -- do it manually later.
+    goto :done
 )
-echo [OK] Python packages installed.
-echo.
 
-:: ── 5. Run GPU verification ───────────────────────────────────────────────────
-echo [4/5] Verifying TensorFlow GPU detection ...
-call conda run -n %ENV_NAME% python verify_gpu.py
-echo.
+if exist .git\ (
+    echo   [INFO] git repository already exists -- skipping init.
+) else (
+    git init
+    echo   [OK] git repository initialised.
+)
 
-:: ── 6. Done ───────────────────────────────────────────────────────────────────
-echo [5/5] Setup complete.
+:: Create .gitkeep files so the managed output folders are tracked by git
+:: (their contents are ignored by .gitignore, but the folders themselves
+::  must exist for the project scripts to run without errors.)
+for %%D in (data checkpoints plots logs) do (
+    if not exist %%D\ mkdir %%D
+    if not exist %%D\.gitkeep type nul > %%D\.gitkeep
+)
+echo   [OK] Output folders created with .gitkeep sentinels:
+echo          data\          <- landmarks.pkl will be saved here
+echo          checkpoints\   <- lip_reader_best.h5 will be saved here
+echo          plots\         <- training_history.png will be saved here
+echo          logs\          <- TensorBoard logs will be saved here
+
+:: Stage everything for a clean first commit
+git add .
+echo   [OK] All project files staged.
+echo.
+echo   Make your first commit when ready:
+echo       git commit -m "initial project structure"
+
+:done
+:: ── Done ──────────────────────────────────────────────────────────────────────
 echo.
 echo ============================================================
-echo   Next steps:
+echo   Setup complete!
 echo ============================================================
-echo   1. Activate the environment in every new terminal:
-echo         conda activate %ENV_NAME%
 echo.
-echo   2. Extract landmarks (run once):
-echo         python extract_landmarks.py
+echo   Activate the environment in every new terminal BEFORE running
+echo   any project script:
 echo.
-echo   3. Train:
-echo         python train.py
+echo       venv\Scripts\activate
 echo.
-echo   4. Webcam demo:
-echo         python predict.py
+echo   Then run in order:
+echo       python extract_landmarks.py    (once, ~20 min)
+echo       python train.py                (~30-60 min on GPU)
+echo       python predict.py              (webcam demo)
+echo.
+echo   To monitor training live:
+echo       tensorboard --logdir logs
+echo.
+echo   Project folder structure after running:
+echo       data\landmarks.pkl
+echo       checkpoints\lip_reader_best.h5
+echo       plots\training_history.png
+echo       logs\  (TensorBoard events)
 echo ============================================================
 echo.
 pause

@@ -1,34 +1,42 @@
 # =============================================================================
 #  .gitignore  –  Lip Reader / MIRACL-VC1 project
+#
+#  Folder structure tracked by git (contents ignored, folders kept via .gitkeep):
+#    data/          <- extracted landmarks  (too large for git)
+#    checkpoints/   <- trained model weights (too large / regenerable)
+#    plots/         <- training curves (regenerable)
+#    logs/          <- TensorBoard events (regenerable)
 # =============================================================================
 
-# ── Large data files (never commit these) ────────────────────────────────────
-landmarks.pkl
+# ── Managed project output folders ───────────────────────────────────────────
+#  Ignore everything inside each folder but keep the folder itself via .gitkeep
+data/*
+!data/.gitkeep
+
+checkpoints/*
+!checkpoints/.gitkeep
+
+plots/*
+!plots/.gitkeep
+
+logs/*
+!logs/.gitkeep
+
+# ── MediaPipe model file (auto-downloaded at runtime, ~29 MB) ─────────────────
+face_landmarker.task
+
+# ── Dataset (too large for git — keep on local disk / external drive) ─────────
+miraclvc1/
+
+# ── Catch-all for any stray large binary artefacts at the project root ────────
 *.pkl
 *.npy
 *.npz
-
-# ── Trained models ────────────────────────────────────────────────────────────
 *.h5
 *.keras
 *.pb
 *.tflite
 saved_model/
-
-# ── Dataset (too large for git — keep on local disk / external drive) ─────────
-miraclvc1/
-dataset/
-
-# ── TensorBoard logs ──────────────────────────────────────────────────────────
-logs/
-runs/
-
-# ── Training artefacts ────────────────────────────────────────────────────────
-training_history.png
-*.png
-*.jpg
-*.jpeg
-!docs/**/*.png         # allow images inside a docs/ folder if you add one
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
@@ -38,16 +46,12 @@ __pycache__/
 *.pyd
 .Python
 
-# ── Virtual environments ──────────────────────────────────────────────────────
+# ── Virtual environment ───────────────────────────────────────────────────────
 venv/
 .venv/
 env/
 ENV/
 .env
-# Conda envs created outside the project are fine (managed by conda itself)
-# but if you ever run `conda create --prefix ./env` inside the project:
-env/
-.conda/
 
 # ── Jupyter / IPython ─────────────────────────────────────────────────────────
 .ipynb_checkpoints/
@@ -58,54 +62,32 @@ dist/
 build/
 *.egg-info/
 *.egg
-wheels/
-pip-wheel-metadata/
 
 # ── Testing / coverage ────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
 
 # ── IDE & editor ──────────────────────────────────────────────────────────────
-# VS Code
 .vscode/
 *.code-workspace
-
-# PyCharm / JetBrains
 .idea/
 *.iml
-
-# Vim / Emacs
 *.swp
 *.swo
 *~
-\#*\#
 
 # ── OS artefacts ──────────────────────────────────────────────────────────────
-# Windows
 Thumbs.db
-Thumbs.db:encdata
-ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-*.lnk
-
-# macOS
 .DS_Store
-.AppleDouble
-.LSOverride
 ._*
 
-# Linux
-*~
-
-# ── Secrets / credentials (safety net) ───────────────────────────────────────
+# ── Secrets ───────────────────────────────────────────────────────────────────
 *.pem
 *.key
-.env
 secrets.py
-credentials.json
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 *.log
