@@ -34,21 +34,40 @@ HISTORY_PNG   = os.path.join(PLOTS_DIR,       "training_history.png")
 
 # ── Sequence ──────────────────────────────────────────────────────────────────
 NUM_FRAMES    = 75     # every sequence is resampled to this many frames
-NUM_LANDMARKS = 20     # lip landmark indices used from MediaPipe
-NUM_FEATURES  = NUM_LANDMARKS * 2   # x + y per landmark  ->  40
+NUM_LANDMARKS = 40     # 20 outer-contour + 20 inner-contour lip points
+NUM_FEATURES  = NUM_LANDMARKS * 2   # x + y per landmark  ->  80
 
 # ── Training ──────────────────────────────────────────────────────────────────
 BATCH_SIZE    = 32
-EPOCHS        = 150
+EPOCHS        = 250
 LEARNING_RATE = 1e-3
 VAL_SPLIT     = 0.15
 TEST_SPLIT    = 0.10
 RANDOM_SEED   = 42
 
-# ── MediaPipe lip contour indices (inner + outer ring) ────────────────────────
+# ── MediaPipe full lip landmark indices ───────────────────────────────────────
+#
+#  MediaPipe Face Mesh defines the mouth via two closed contours:
+#
+#   Outer contour – the visible edge of both lips (20 points)
+#   Inner contour – the mouth opening/closing aperture (20 points)
+#
+#  The original 20 indices were a single lower-lip ring, giving the model
+#  no signal from upper-lip shape or mouth aperture — both critical cues
+#  for distinguishing words like "hello" vs "well done" or "start" vs "stop".
+#
+#  Outer contour (counter-clockwise from right corner):
+#    right corner -> upper lip -> left corner -> lower lip -> back
+#  Inner contour (counter-clockwise from right corner):
+#    right corner -> upper inner -> left corner -> lower inner -> back
+#
 LIP_INDICES = [
-     61, 146,  91, 181,  84,  17, 314, 405, 321, 375,
-    291, 308, 324, 318, 402, 317,  14,  87, 178,  88,
+    # ── Outer lip contour (20 points) ─────────────────────────────────────────
+     61, 185,  40,  39,  37,   0, 267, 269, 270, 409,   # upper outer
+    291, 375, 321, 405, 314,  17,  84, 181,  91, 146,   # lower outer
+    # ── Inner lip contour (20 points) ─────────────────────────────────────────
+     78, 191,  80,  81,  82,  13, 312, 311, 310, 415,   # upper inner
+    308, 324, 318, 402, 317,  14,  87, 178,  88,  95,   # lower inner
 ]
 
 # ── Class labels ──────────────────────────────────────────────────────────────
